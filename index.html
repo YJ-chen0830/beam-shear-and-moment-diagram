@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>梁剪力彎矩圖 | Beam Shear &amp; Moment Diagram</title>
+<style>
+  :root{ --navy:#0b1f3a; --navy2:#13284a; --gold:#c9a14a; --gold2:#e0bf6e; --bg:#f5f3ee; --ink:#1c2530; --line:#d8d2c2; }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:"Noto Sans TC","Segoe UI",sans-serif; background:var(--bg); color:var(--ink);}
+  header{background:linear-gradient(135deg,var(--navy),var(--navy2)); color:#f5f3ee; padding:28px 32px;}
+  header h1{margin:0; font-size:22px;}
+  header span{color:var(--gold2); font-size:13px; display:block; margin-top:4px;}
+  main{max-width:1100px; margin:0 auto; padding:28px 20px 60px;}
+  .grid{display:grid; grid-template-columns:380px 1fr; gap:24px;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+  .card{background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px 22px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .card h2{font-size:15px; margin:0 0 14px; color:var(--navy); border-bottom:2px solid var(--gold); padding-bottom:8px;}
+  label{display:block; font-size:12.5px; color:#555; margin:10px 0 4px;}
+  input,select{width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:14px; background:#fafaf8;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;}
+  button{margin-top:10px; width:100%; padding:10px; border:none; border-radius:7px; background:var(--navy); color:#fff; font-size:14px; font-weight:600; cursor:pointer;}
+  button:hover{background:var(--navy2);}
+  button.secondary{background:#888;}
+  .loadRow{border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:10px; background:#fafaf8; position:relative;}
+  .loadRow .del{position:absolute; right:8px; top:8px; background:#c0392b; color:#fff; border:none; width:22px; height:22px; border-radius:50%; cursor:pointer; font-size:12px; padding:0;}
+  svg{width:100%; height:520px; background:#fff; border:1px solid var(--line); border-radius:8px;}
+  .result{margin-top:16px; font-size:13.5px;}
+  table{width:100%; border-collapse:collapse;}
+  td{padding:5px 4px; border-bottom:1px solid #eee;}
+  td:last-child{text-align:right; font-weight:600;}
+</style>
+</head>
+<body>
+<header>
+  <h1>梁剪力彎矩圖 (Beam Shear &amp; Moment Diagram)</h1>
+  <span>簡支梁 / 懸臂梁 · 點載重 + 均布載重 · 最大剪力/彎矩自動標示</span>
+</header>
+
+<main>
+<div class="grid">
+
+  <div class="card">
+    <h2>梁設定 Beam</h2>
+    <label>梁型式</label>
+    <select id="beamType" onchange="render()">
+      <option value="simple">簡支梁 (Simply Supported)</option>
+      <option value="cantilever">懸臂梁 (Cantilever, 固定於左端)</option>
+    </select>
+    <label>梁長 L (m)</label>
+    <input id="L" type="number" value="6" step="0.1" onchange="render()">
+
+    <h2 style="margin-top:18px;">載重 Loads</h2>
+    <div id="loadsContainer"></div>
+    <div class="row2">
+      <button onclick="addLoad('point')">+ 點載重</button>
+      <button onclick="addLoad('udl')">+ 均布載重</button>
+    </div>
+
+    <div class="result" id="result"></div>
+  </div>
+
+  <div class="card">
+    <h2>內力圖 Diagrams</h2>
+    <svg id="chart" viewBox="0 0 700 560"></svg>
+  </div>
+
+</div>
+</main>
+
+<script>
+let loads = [];
+let idCounter = 0;
+
+function addLoad(type){
+  const id = idCounter++;
+  if(type==='point') loads.push({id, type:'point', P:10, a:3});
+  else loads.push({id, type:'udl', w:5, a1:0, a2:6});
+  renderLoadRows();
+  render();
+}
+function removeLoad(id){
+  loads = loads.filter(l=>l.id!==id);
+  renderLoadRows();
+  render();
+}
+function updateLoad(id, key, val){
+  const l = loads.find(l=>l.id===id);
+  if(l) l[key] = parseFloat(val);
+  render();
+}
+
+function renderLoadRows(){
+  const c = document.getElementById('loadsContainer');
+  c.innerHTML = '';
+  loads.forEach(l=>{
+    const div = document.createElement('div');
+    div.className = 'loadRow';
+    if(l.type==='point'){
+      div.innerHTML = `
+        <button class="del" onclick="removeLoad(${l.id})">×</button>
+        <div style="font-size:12.5px; font-weight:600; color:#0b1f3a; margin-bottom:6px;">點載重 Point Load</div>
+        <div class="row2">
+          <div><label>P (kN, 向下為正)</label><input type="number" value="${l.P}" onchange="updateLoad(${l.id},'P',this.value)"></div>
+          <div><label>位置 a (m, 從左端)</label><input type="number" value="${l.a}" onchange="updateLoad(${l.id},'a',this.value)"></div>
+        </div>`;
+    } else {
+      div.innerHTML = `
+        <button class="del" onclick="removeLoad(${l.id})">×</button>
+        <div style="font-size:12.5px; font-weight:600; color:#0b1f3a; margin-bottom:6px;">均布載重 UDL</div>
+        <div class="row3">
+          <div><label>w (kN/m)</label><input type="number" value="${l.w}" onchange="updateLoad(${l.id},'w',this.value)"></div>
+          <div><label>起點 a1 (m)</label><input type="number" value="${l.a1}" onchange="updateLoad(${l.id},'a1',this.value)"></div>
+          <div><label>終點 a2 (m)</label><input type="number" value="${l.a2}" onchange="updateLoad(${l.id},'a2',this.value)"></div>
+        </div>`;
+    }
+    c.appendChild(div);
+  });
+}
+
+// compute reactions, then V(x), M(x) sampled along beam
+function computeDiagram(){
+  const type = document.getElementById('beamType').value;
+  const L = parseFloat(document.getElementById('L').value);
+  const N = 400;
+  const xs = Array.from({length:N+1}, (_,i)=>L*i/N);
+
+  let RA=0, RB=0, MA=0; // RA at x=0, RB at x=L (simple) ; MA = fixed moment at x=0 (cantilever)
+  // total load and moment about x=0 for simple beam reactions
+  let totalP = 0, momAbout0 = 0;
+  loads.forEach(l=>{
+    if(l.type==='point'){
+      totalP += l.P;
+      momAbout0 += l.P*l.a;
+    } else {
+      const w=l.w, a1=Math.min(l.a1,l.a2), a2=Math.max(l.a1,l.a2);
+      const len=a2-a1, R=w*len, cx=(a1+a2)/2;
+      totalP += R;
+      momAbout0 += R*cx;
+    }
+  });
+
+  if(type==='simple'){
+    RB = momAbout0/L;
+    RA = totalP - RB;
+  } else {
+    RA = totalP; // cantilever: all reaction at fixed end x=0
+    MA = momAbout0; // reaction moment at fixed end
+  }
+
+  function shearAt(x){
+    let V = type==='simple' ? RA : RA;
+    loads.forEach(l=>{
+      if(l.type==='point'){
+        if(x > l.a) V -= l.P;
+      } else {
+        const a1=Math.min(l.a1,l.a2), a2=Math.max(l.a1,l.a2);
+        if(x > a1){
+          const xe = Math.min(x,a2);
+          V -= l.w*(xe-a1);
+        }
+      }
+    });
+    return V;
+  }
+  function momentAt(x){
+    let M = type==='simple' ? RA*x : RA*x - MA;
+    loads.forEach(l=>{
+      if(l.type==='point'){
+        if(x > l.a) M -= l.P*(x-l.a);
+      } else {
+        const a1=Math.min(l.a1,l.a2), a2=Math.max(l.a1,l.a2);
+        if(x > a1){
+          const xe = Math.min(x,a2);
+          const len = xe-a1;
+          M -= l.w*len*(x-(a1+xe)/2);
+        }
+      }
+    });
+    return M;
+  }
+
+  const Vs = xs.map(shearAt);
+  const Ms = xs.map(momentAt);
+  return {xs, Vs, Ms, RA, RB, MA, type, L};
+}
+
+function render(){
+  const d = computeDiagram();
+  drawChart(d);
+
+  let maxV=-Infinity, minV=Infinity, maxM=-Infinity, minM=Infinity, xMaxV=0, xMaxM=0, xMinM=0;
+  d.xs.forEach((x,i)=>{
+    if(d.Vs[i]>maxV){maxV=d.Vs[i]; xMaxV=x;}
+    if(d.Vs[i]<minV){minV=d.Vs[i];}
+    if(d.Ms[i]>maxM){maxM=d.Ms[i]; xMaxM=x;}
+    if(d.Ms[i]<minM){minM=d.Ms[i]; xMinM=x;}
+  });
+
+  const res = document.getElementById('result');
+  let html = '<table>';
+  if(d.type==='simple'){
+    html += `<tr><td>支承反力 RA (左)</td><td>${d.RA.toFixed(2)} kN</td></tr>`;
+    html += `<tr><td>支承反力 RB (右)</td><td>${d.RB.toFixed(2)} kN</td></tr>`;
+  } else {
+    html += `<tr><td>固定端反力 RA</td><td>${d.RA.toFixed(2)} kN</td></tr>`;
+    html += `<tr><td>固定端反力彎矩 MA</td><td>${d.MA.toFixed(2)} kN·m</td></tr>`;
+  }
+  html += `<tr><td>最大剪力 Vmax</td><td>${maxV.toFixed(2)} kN (x=${xMaxV.toFixed(2)} m)</td></tr>`;
+  html += `<tr><td>最小剪力 Vmin</td><td>${minV.toFixed(2)} kN</td></tr>`;
+  html += `<tr><td>最大彎矩 Mmax</td><td>${maxM.toFixed(2)} kN·m (x=${xMaxM.toFixed(2)} m)</td></tr>`;
+  html += `<tr><td>最小彎矩 Mmin</td><td>${minM.toFixed(2)} kN·m (x=${xMinM.toFixed(2)} m)</td></tr>`;
+  html += '</table>';
+  res.innerHTML = html;
+}
+
+function drawChart(d){
+  const svg = document.getElementById('chart');
+  svg.innerHTML = '';
+  const svgns = "http://www.w3.org/2000/svg";
+  function el(tag,attrs){
+    const e = document.createElementNS(svgns,tag);
+    for(const k in attrs) e.setAttribute(k,attrs[k]);
+    return e;
+  }
+  const W=700, H=560, ml=60, mr=20;
+  const beamY=40, beamW=W-ml-mr;
+  const vTop=110, vH=180, mTop=320, mH=200;
+
+  // beam line
+  svg.appendChild(el('line',{x1:ml,y1:beamY,x2:ml+beamW,y2:beamY,stroke:'#0b1f3a','stroke-width':4}));
+  svg.appendChild(el('text',{x:ml,y:beamY-12,'font-size':12,fill:'#555'})).textContent=`L = ${d.L} m (${d.type==='simple'?'簡支梁':'懸臂梁'})`;
+
+  function xPix(x){ return ml + (x/d.L)*beamW; }
+
+  // Shear diagram
+  svg.appendChild(el('line',{x1:ml,y1:vTop+vH/2,x2:ml+beamW,y2:vTop+vH/2,stroke:'#999'}));
+  svg.appendChild(el('text',{x:ml,y:vTop-10,'font-size':12,fill:'#555','font-weight':'bold'})).textContent='剪力圖 Shear V(x)';
+  const maxAbsV = Math.max(...d.Vs.map(Math.abs), 1);
+  let pathV = '';
+  d.xs.forEach((x,i)=>{
+    const px = xPix(x);
+    const py = vTop+vH/2 - (d.Vs[i]/maxAbsV)*(vH/2-10);
+    pathV += (i===0?'M':'L') + px + ',' + py + ' ';
+  });
+  svg.appendChild(el('path',{d:pathV, fill:'none', stroke:'#c9a14a', 'stroke-width':2}));
+
+  // Moment diagram
+  svg.appendChild(el('line',{x1:ml,y1:mTop+mH/2,x2:ml+beamW,y2:mTop+mH/2,stroke:'#999'}));
+  svg.appendChild(el('text',{x:ml,y:mTop-10,'font-size':12,fill:'#555','font-weight':'bold'})).textContent='彎矩圖 Moment M(x)';
+  const maxAbsM = Math.max(...d.Ms.map(Math.abs), 1);
+  let pathM = '';
+  d.xs.forEach((x,i)=>{
+    const px = xPix(x);
+    const py = mTop+mH/2 - (d.Ms[i]/maxAbsM)*(mH/2-10);
+    pathM += (i===0?'M':'L') + px + ',' + py + ' ';
+  });
+  svg.appendChild(el('path',{d:pathM, fill:'none', stroke:'#0b1f3a', 'stroke-width':2}));
+
+  svg.appendChild(el('text',{x:ml,y:H-10,'font-size':11,fill:'#999'})).textContent='x (m) →';
+}
+
+addLoad('point');
+addLoad('udl');
+render();
+</script>
+</body>
+</html>
