@@ -31,10 +31,11 @@
   td{padding:5px 4px; border-bottom:1px solid #eee;}
   td:last-child{text-align:right; font-weight:600;}
 </style>
-<script src="https://yj-chen0830.github.io/jrh-core/jrh-core.js?v=1" defer></script>
+<script src="https://yj-chen0830.github.io/jrh-core/jrh-core.js?v=3" defer></script>
 </head>
 <body data-tool="bsm">
 <header>
+  <a href="https://yj-chen0830.github.io/engineering-hub/" style="color:var(--gold2);font-size:12.5px;text-decoration:none;display:inline-block;margin-bottom:8px;">← 返回工程計算中心</a>
   <h1>梁剪力彎矩圖 (Beam Shear &amp; Moment Diagram)</h1>
   <span>簡支梁 / 懸臂梁 · 點載重 + 均布載重 · 最大剪力/彎矩自動標示</span>
 </header>
@@ -266,7 +267,7 @@ addLoad('point');
 addLoad('udl');
 render();
 </script>
-<div class="no-print" style="max-width:1100px;margin:10px auto 40px;padding:0 20px;"><button type="button" onclick="jrhPrint('梁剪力彎矩圖計算書')" style="width:100%;padding:13px;border:none;border-radius:8px;background:#c9a14a;color:#0b1f3a;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">📄 產出計算書 PDF</button></div>
+<div class="no-print" style="max-width:1100px;margin:10px auto 40px;padding:0 20px;"><button type="button" onclick="JRH.checkEmail(function(){jrhPrint('梁剪力彎矩圖計算書');})" style="width:100%;padding:13px;border:none;border-radius:8px;background:#c9a14a;color:#0b1f3a;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">📄 產出計算書 PDF</button></div>
 <style>@media print{.no-print{display:none!important}}</style>
 </body>
 </html>
