@@ -30,6 +30,23 @@
   table{width:100%; border-collapse:collapse;}
   td{padding:5px 4px; border-bottom:1px solid #eee;}
   td:last-child{text-align:right; font-weight:600;}
+  details.proc{margin-top:16px;border:1px solid var(--line);border-radius:8px;background:#fafaf8;overflow:hidden;}
+  details.proc summary{cursor:pointer;padding:10px 14px;font-weight:700;font-size:13px;color:var(--navy);user-select:none;list-style:none;display:flex;align-items:center;gap:6px;}
+  details.proc summary::before{content:"▶";font-size:10px;transition:transform .2s;}
+  details[open].proc summary::before{transform:rotate(90deg);}
+  details.proc pre{margin:0;padding:12px 16px 16px;font-family:"Courier New",monospace;font-size:11.5px;line-height:1.9;white-space:pre-wrap;color:#2c3e50;border-top:1px solid var(--line);}
+  @media print{
+    header,.no-print{display:none!important;}
+    body{background:#fff;margin:0;font-size:9pt;line-height:1.5;color:#111;}
+    main{padding:0;max-width:100%!important;}
+    .grid{grid-template-columns:1fr!important;gap:10pt!important;}
+    .card{box-shadow:none!important;border:1px solid #ccc!important;border-radius:4pt!important;padding:10pt 12pt!important;break-inside:avoid;}
+    details.proc{display:block!important;margin-top:10pt!important;border:1pt solid #0b1f3a!important;border-radius:4pt!important;break-inside:avoid;background:#f9f9f6!important;}
+    details.proc>summary{display:none!important;}
+    details.proc::before{content:"📋  計算過程（供第三方檢核）";display:block;font-weight:700;font-size:8pt;color:#0b1f3a;padding:6pt 10pt 4pt;border-bottom:1px solid #ccc;letter-spacing:.04em;}
+    details.proc>pre{font-size:7pt!important;line-height:1.65!important;white-space:pre-wrap!important;padding:6pt 10pt 10pt!important;color:#1a1a1a!important;font-family:"Courier New",monospace!important;}
+    @page{margin:15mm 12mm;size:A4;}
+  }
 </style>
 <script src="https://yj-chen0830.github.io/jrh-core/jrh-core.js?v=3" defer></script>
 </head>
@@ -61,6 +78,10 @@
     </div>
 
     <div class="result" id="result"></div>
+    <details class="proc" id="proc" style="display:none">
+      <summary>📋 計算過程（供第三方檢核）</summary>
+      <pre id="proc-text"></pre>
+    </details>
   </div>
 
   <div class="card">
@@ -185,7 +206,53 @@ function computeDiagram(){
 
   const Vs = xs.map(shearAt);
   const Ms = xs.map(momentAt);
-  return {xs, Vs, Ms, RA, RB, MA, type, L};
+  return {xs, Vs, Ms, RA, RB, MA, type, L, totalP, momAbout0};
+}
+
+function showProc(text){ document.getElementById('proc-text').textContent = text; document.getElementById('proc').style.display = ''; }
+function hideProc(){ document.getElementById('proc').style.display = 'none'; }
+
+function shearAtExplain(x, RA, type, loads){
+  let V = RA;
+  const lines = ['V('+x.toFixed(2)+') = RA = '+RA.toFixed(2)+' kN'];
+  loads.forEach((l,i)=>{
+    if(l.type==='point'){
+      if(x > l.a){ V -= l.P; lines.push('  − #'+(i+1)+' P = '+l.P+' kN（作用於 a='+l.a+' m ≤ x）'); }
+    } else {
+      const a1=Math.min(l.a1,l.a2), a2=Math.max(l.a1,l.a2);
+      if(x > a1){
+        const xe = Math.min(x,a2);
+        const contrib = l.w*(xe-a1);
+        V -= contrib;
+        lines.push('  − #'+(i+1)+' w×(x範圍)= '+l.w+'×('+xe.toFixed(2)+'−'+a1+') = '+contrib.toFixed(2)+' kN');
+      }
+    }
+  });
+  lines.push('  → V('+x.toFixed(2)+') = '+V.toFixed(2)+' kN');
+  return {value:V, lines};
+}
+
+function momentAtExplain(x, RA, MA, type, loads){
+  let M = type==='simple' ? RA*x : RA*x - MA;
+  const base = type==='simple'
+    ? 'RA×x = '+RA.toFixed(2)+'×'+x.toFixed(2)
+    : 'RA×x − MA = '+RA.toFixed(2)+'×'+x.toFixed(2)+' − '+MA.toFixed(2);
+  const lines = ['M('+x.toFixed(2)+') = '+base+' = '+M.toFixed(2)+' kN·m（未計入跨內載重前）'];
+  loads.forEach((l,i)=>{
+    if(l.type==='point'){
+      if(x > l.a){ const c=l.P*(x-l.a); M -= c; lines.push('  − #'+(i+1)+' P×(x−a) = '+l.P+'×('+x.toFixed(2)+'−'+l.a+') = '+c.toFixed(2)+' kN·m'); }
+    } else {
+      const a1=Math.min(l.a1,l.a2), a2=Math.max(l.a1,l.a2);
+      if(x > a1){
+        const xe=Math.min(x,a2), len=xe-a1, cx=(a1+xe)/2;
+        const c = l.w*len*(x-cx);
+        M -= c;
+        lines.push('  − #'+(i+1)+' w×len×(x−形心) = '+l.w+'×'+len.toFixed(2)+'×('+x.toFixed(2)+'−'+cx.toFixed(2)+') = '+c.toFixed(2)+' kN·m');
+      }
+    }
+  });
+  lines.push('  → M('+x.toFixed(2)+') = '+M.toFixed(2)+' kN·m');
+  return {value:M, lines};
 }
 
 function render(){
@@ -215,6 +282,57 @@ function render(){
   html += `<tr><td>最小彎矩 Mmin</td><td>${minM.toFixed(2)} kN·m (x=${xMinM.toFixed(2)} m)</td></tr>`;
   html += '</table>';
   res.innerHTML = html;
+
+  if(!loads.length){ hideProc(); return; }
+
+  const lines = [];
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push('  梁剪力彎矩計算過程（靜力平衡法）');
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push('【輸入】'+(d.type==='simple'?'簡支梁':'懸臂梁（固定於左端）')+'，L = '+d.L+' m');
+  loads.forEach((l,i)=>{
+    if(l.type==='point') lines.push('  #'+(i+1)+' 點載重 P = '+l.P+' kN @ a = '+l.a+' m');
+    else lines.push('  #'+(i+1)+' 均布載重 w = '+l.w+' kN/m，範圍 ['+Math.min(l.a1,l.a2)+', '+Math.max(l.a1,l.a2)+'] m');
+  });
+  lines.push('');
+  lines.push('【一】反力計算（靜力平衡）');
+  lines.push('  ΣM(x=0) 各項貢獻：');
+  loads.forEach((l,i)=>{
+    if(l.type==='point') lines.push('   #'+(i+1)+'：P×a = '+l.P+'×'+l.a+' = '+(l.P*l.a).toFixed(2)+' kN·m');
+    else {
+      const a1=Math.min(l.a1,l.a2), a2=Math.max(l.a1,l.a2), len=a2-a1, R=l.w*len, cx=(a1+a2)/2;
+      lines.push('   #'+(i+1)+'：合力 R=w×len = '+l.w+'×'+len.toFixed(2)+' = '+R.toFixed(2)+' kN @ 形心 '+cx.toFixed(2)+' m → 力矩 = '+(R*cx).toFixed(2)+' kN·m');
+    }
+  });
+  lines.push('  ΣM(x=0) = '+d.momAbout0.toFixed(2)+' kN·m；ΣP = '+d.totalP.toFixed(2)+' kN');
+  if(d.type==='simple'){
+    lines.push('  RB = ΣM/L = '+d.momAbout0.toFixed(2)+'/'+d.L+' = '+d.RB.toFixed(2)+' kN');
+    lines.push('  RA = ΣP − RB = '+d.totalP.toFixed(2)+' − '+d.RB.toFixed(2)+' = '+d.RA.toFixed(2)+' kN');
+  } else {
+    lines.push('  RA = ΣP = '+d.totalP.toFixed(2)+' kN（固定端垂直反力）');
+    lines.push('  MA = ΣM(x=0) = '+d.momAbout0.toFixed(2)+' kN·m（固定端反力彎矩）');
+  }
+  lines.push('');
+  lines.push('【二】關鍵斷面 V(x)、M(x)（取各載重位置與極值位置）');
+  const stationSet = new Set([0, d.L, xMaxV, xMaxM, xMinM].map(v=>Math.round(v*1000)/1000));
+  loads.forEach(l=>{
+    if(l.type==='point') stationSet.add(Math.round(l.a*1000)/1000);
+    else { stationSet.add(Math.round(l.a1*1000)/1000); stationSet.add(Math.round(l.a2*1000)/1000); }
+  });
+  const stations = Array.from(stationSet).filter(x=>x>=0 && x<=d.L).sort((a,b)=>a-b);
+  stations.forEach(x=>{
+    const vE = shearAtExplain(x, d.RA, d.type, loads);
+    const mE = momentAtExplain(x, d.RA, d.MA, d.type, loads);
+    lines.push('  '+vE.lines.join('\n  '));
+    lines.push('  '+mE.lines.join('\n  '));
+    lines.push('');
+  });
+  lines.push('【三】最大值摘要');
+  lines.push('  Vmax = '+maxV.toFixed(2)+' kN @ x='+xMaxV.toFixed(2)+' m　Vmin = '+minV.toFixed(2)+' kN');
+  lines.push('  Mmax = '+maxM.toFixed(2)+' kN·m @ x='+xMaxM.toFixed(2)+' m　Mmin = '+minM.toFixed(2)+' kN·m @ x='+xMinM.toFixed(2)+' m');
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  showProc(lines.join('\n'));
 }
 
 function drawChart(d){
