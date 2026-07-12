@@ -302,6 +302,13 @@ function render(){
   html += '</table>';
   res.innerHTML = html;
 
+  if(window.JRH && JRH.saveOutput && loads.length){
+    JRH.saveOutput({
+      Mu_max: Math.max(Math.abs(maxM), Math.abs(minM)),
+      Vu_max: Math.max(Math.abs(maxV), Math.abs(minV))
+    });
+  }
+
   if(!loads.length){ hideProc(); return; }
 
   const lines = [];
